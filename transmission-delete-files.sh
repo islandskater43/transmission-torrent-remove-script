@@ -1,21 +1,10 @@
 #!/bin/sh
 
-#https://forum.transmissionbt.com/viewtopic.php?t=13427
-
-#https://luther.io/articles/aws-cli-on-rpi/
-
-#https://docs.aws.amazon.com/cli/latest/reference/ses/send-email.html
-
-#@pi:~ $ aws --region us-east-1 ses send-email --from test@email.com --to test@email.com --subject "test" --text "test $NAME email"
-
 # Automatically remove a torrent and delete its data after a specified period of
 # time (in seconds).
 
-## Load config values
-
-
 ## Folder where torrents are stored
-TARGET=
+TARGET=/path/to/torrents
 
 ## RPC User / Pass auth creds for transmission
 USER=
@@ -31,18 +20,14 @@ TIMETOKEEP=60
 FROMEMAIL=
 TOEMAIL=
 
-# The default is 10 days (in seconds).
-
+## Debugging
+DRYRUN=true
 
 ##############################################
 ### You shouldn't need to edit below here. ###
 ##############################################
 
 CUTOFF=`expr 86400 \* $TIMETOKEEP`
-
-echo $CUTOFF
-
-exit;
 
 # Tokenise over newlines instead of spaces.
 OLDIFS=$IFS
@@ -61,7 +46,6 @@ for ENTRY in `$BIN -n $USER:$PASS -l | grep 100%.*Done`; do
     if [ -d "$TARGET/$NAME" ]; then
         LASTMODIFIED=0
         for FILE in `find $TARGET -name $NAME`; do
-#        for FILE in `find $TARGET/$NAME`; do
              AGE=`stat "$FILE" -c%Y`
              if [ $AGE -gt $LASTMODIFIED ]; then
                  LASTMODIFIED=$AGE
@@ -70,7 +54,6 @@ for ENTRY in `$BIN -n $USER:$PASS -l | grep 100%.*Done`; do
 
     # Otherwise, just get the modified time.
     else
-#        LASTMODIFIED=`stat "$TARGET/$NAME" -c%Y`
 	    FILE1=`find $TARGET -name $NAME`
         LASTMODIFIED=`stat "$FILE1" -c%Y`    
     fi
@@ -82,8 +65,11 @@ for ENTRY in `$BIN -n $USER:$PASS -l | grep 100%.*Done`; do
     if [ $DIFF -gt $CUTOFF ]; then
         date
         echo "Removing $NAME with ID:$ID"
-        aws --region us-east-1 ses send-email --from $FROMEMAIL --to $TOEMAIL --subject "Torrent Deleted" --text "The following torrent was deleted: $NAME"
-        #$BIN -n $USER:$PASS -t $ID --remove-and-delete
+        if ! $DRYRUN ; then
+            echo "delete executed"
+            aws --region us-east-1 ses send-email --from $FROMEMAIL --to $TOEMAIL --subject "Torrent Deleted" --text "The following torrent was deleted: $NAME"
+            $BIN -n $USER:$PASS -t $ID --remove-and-delete
+        fi
     fi
 
 done
